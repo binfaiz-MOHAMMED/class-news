@@ -1,0 +1,28 @@
+name: Update education news
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # كل يوم 3:00 بتوقيت UTC (6:00 صباحًا بتوقيت السعودية)
+  workflow_dispatch:       # تشغيل يدوي من تبويب Actions
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Generate news.json
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node update-news.mjs
+      - name: Commit changes
+        run: |
+          git config user.name "news-bot"
+          git config user.email "news-bot@users.noreply.github.com"
+          git add news.json
+          git diff --staged --quiet || (git commit -m "Update news" && git push)
