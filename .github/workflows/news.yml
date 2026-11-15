@@ -2,8 +2,8 @@ name: Update education news
 
 on:
   schedule:
-    - cron: '0 3 * * *'   # كل يوم 3:00 بتوقيت UTC (6:00 صباحًا بتوقيت السعودية)
-  workflow_dispatch:       # تشغيل يدوي من تبويب Actions
+    - cron: '0 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,7 +19,7 @@ jobs:
       - name: Generate news.json
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-       run: node update-news.mjs
+        run: node update-news.mjs
       - name: Commit changes
         run: |
           git config user.name "news-bot"
