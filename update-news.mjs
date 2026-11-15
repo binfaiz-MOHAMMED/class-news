@@ -1,16 +1,22 @@
-// نسخة مجانية: تجلب أحدث عناوين أخبار التعليم في السعودية من أخبار Google (RSS) وتكتب news.json.
+// نسخة مجانية: تجلب أحدث عناوين أخبار محافظة الليث (في كل المجالات) من أخبار Google (RSS) وتكتب news.json.
 // لا تحتاج مفتاح API ولا رصيدًا. تعمل يوميًا من GitHub Actions.
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+// استعلامات بين علامتي اقتباس لتطابق العبارة نفسها (كلمة «الليث» وحدها تلتبس بأسماء وأشياء أخرى).
+// strong = العبارة نفسها كافية لتحديد المحافظة. وغير ذلك نشترط وجود «الليث» في العنوان.
 const QUERIES = [
-  'وزارة التعليم السعودية',
-  'التعليم العام السعودية المدارس',
-  'وزير التعليم السعودي',
+  { q: '"محافظة الليث"', strong: true },
+  { q: '"محافظ الليث"', strong: true },
+  { q: '"بلدية الليث"', strong: true },
+  { q: '"مركز الليث"', strong: true },
+  { q: '"الليث" "منطقة مكة المكرمة"', strong: false },
+  { q: '"الليث" "مكة المكرمة"', strong: false },
 ];
-const MAX_ITEMS = 8;
-const MAX_PER_SOURCE = 2;
-const DAYS = 7;
+const MAX_ITEMS = 10;
+const MAX_PER_SOURCE = 3;
+const DAYS = 30;       // أخبار محافظة أقل عددًا، فنوسّع النافذة
+const MIN_ITEMS = 2;
 
 const decode = (s) => String(s || '')
   .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
@@ -43,6 +49,12 @@ export function parseRss(xml) {
   return out;
 }
 
+// يُبقي الأخبار المتعلقة بالليث فقط.
+const NOT_LAITH = /الليث بن|الليث ابن|ليث الأسد|أسد الليث/; // أشخاص وأشياء تحمل الاسم نفسه
+export function relevant(items) {
+  return items.filter((it) => !NOT_LAITH.test(it.title) && (it.strong || /الليث/.test(it.title)));
+}
+
 // يدمج النتائج: بلا تكرار، الأحدث أولًا، وبحد أقصى لكل مصدر للتنويع.
 export function pickItems(all, now = Date.now()) {
   const minTime = now - DAYS * 24 * 3600 * 1000;
@@ -69,11 +81,11 @@ export function pickItems(all, now = Date.now()) {
   return items;
 }
 
-async function fetchQuery(q) {
+async function fetchQuery({ q, strong }) {
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:${DAYS}d`)}&hl=ar&gl=SA&ceid=SA:ar`;
   const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; class-news-bot)' } });
   if (!res.ok) throw new Error(`فشل جلب الأخبار (${res.status}) للاستعلام: ${q}`);
-  return parseRss(await res.text());
+  return parseRss(await res.text()).map((it) => ({ ...it, strong }));
 }
 
 async function main() {
@@ -82,8 +94,8 @@ async function main() {
   for (const q of QUERIES) {
     try { all = all.concat(await fetchQuery(q)); } catch (e) { lastError = e; }
   }
-  const items = pickItems(all);
-  if (items.length < 3) {
+  const items = pickItems(relevant(all));
+  if (items.length < MIN_ITEMS) {
     throw new Error(`عدد الأخبار قليل (${items.length}). لم يُحدَّث news.json.${lastError ? ` آخر خطأ: ${lastError.message}` : ''}`);
   }
   fs.writeFileSync('news.json', JSON.stringify({ updatedAt: new Date().toISOString(), items }, null, 2), 'utf8');
